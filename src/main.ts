@@ -13,25 +13,19 @@ export function calculateHelixPosition(
   const helixParticleIndex = Math.floor(i / 2);
   const particlesPerHelix = particleCount / 2;
   
-  // Calculate t with proper closure
-  // For perfect closure, the last particle should be at the same position as the first (t=0.0)
-  let t: number;
-  if (helixParticleIndex === particlesPerHelix - 1) {
-    // Last particle: explicitly use t=0.0 to match first particle position
-    t = 0.0;
-  } else {
-    t = helixParticleIndex / particlesPerHelix;
-  }
-  t = (t + timeOffset) % 1.0;
+  // Calculate t from 0 to 1.0
+  const t = (helixParticleIndex / particlesPerHelix) + timeOffset;
+  // Wrap t to keep it in [0, 1) range
+  const wrappedT = t >= 1.0 ? (t % 1.0) : (t < 0 ? (t % 1.0 + 1.0) : t);
   
   // Major circle radius (the torus center)
   const majorRadius = helixHeight / (2 * Math.PI);
   
   // Angle along the major circle (full 2π rotation)
-  const majorAngle = t * Math.PI * 2;
+  const majorAngle = wrappedT * Math.PI * 2;
   
   // Helix spiral angle (multiple turns)
-  const helixAngle = t * turns * Math.PI * 2;
+  const helixAngle = wrappedT * turns * Math.PI * 2;
   const phaseOffset = helixIndex * Math.PI;
   
   // Calculate position on the minor circle (helix spiral)
@@ -54,11 +48,15 @@ const camera = new THREE.PerspectiveCamera(
   75,
   window.innerWidth / window.innerHeight,
   0.1,
-  1000
+  10000
 );
 // Bird's eye view - camera above looking down
 camera.position.set(0, 8, 0);
 camera.lookAt(0, 0, 0);
+
+// Grid parameters
+const gridSize = 5; // 5x5 grid
+const gridSpacing = 35.0; // Space between helices (almost touching)
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -77,28 +75,43 @@ const material = new THREE.ShaderMaterial({
 });
 
 const particleCount = 2000;
-const helixRadius = 0.3;
-const helixHeight = 6.0;
+const helixRadius = 3.0;
+const helixHeight = 60.0;
 const turns = 4.0;
 
-const geometry = new THREE.BufferGeometry();
-const positions = new Float32Array(particleCount * 3);
-const colors = new Float32Array(particleCount * 3);
-const sizes = new Float32Array(particleCount);
+// Create grid of helices
+const totalParticles = gridSize * gridSize * particleCount;
 
-for (let i = 0; i < particleCount; i++) {
-  const pos = calculateHelixPosition(i, particleCount, helixRadius, helixHeight, turns, 0);
-  positions[i * 3] = pos.x;
-  positions[i * 3 + 1] = pos.y;
-  positions[i * 3 + 2] = pos.z;
-  
-  const t = Math.floor(i / 2) / (particleCount / 2);
-  const hue = (t * 0.7 + pos.helixIndex * 0.3) % 1.0;
-  const color = new THREE.Color().setHSL(hue, 0.8, 0.6);
-  colors[i * 3] = color.r;
-  colors[i * 3 + 1] = color.g;
-  colors[i * 3 + 2] = color.b;
-  sizes[i] = 6;
+// Create a single large geometry for all particles
+const geometry = new THREE.BufferGeometry();
+const positions = new Float32Array(totalParticles * 3);
+const colors = new Float32Array(totalParticles * 3);
+const sizes = new Float32Array(totalParticles);
+
+let particleIndex = 0;
+for (let gridX = 0; gridX < gridSize; gridX++) {
+  for (let gridZ = 0; gridZ < gridSize; gridZ++) {
+    const offsetX = (gridX - (gridSize - 1) / 2) * gridSpacing;
+    const offsetZ = (gridZ - (gridSize - 1) / 2) * gridSpacing;
+    
+    for (let i = 0; i < particleCount; i++) {
+      const pos = calculateHelixPosition(i, particleCount, helixRadius, helixHeight, turns, 0);
+      positions[particleIndex * 3] = pos.x + offsetX;
+      positions[particleIndex * 3 + 1] = pos.y;
+      positions[particleIndex * 3 + 2] = pos.z + offsetZ;
+      
+      const t = Math.floor(i / 2) / (particleCount / 2);
+      // Simple color scheme based on position
+      const hue = (t + pos.helixIndex * 0.5) % 1.0;
+      const color = new THREE.Color().setHSL(hue, 0.8, 0.6);
+      colors[particleIndex * 3] = color.r;
+      colors[particleIndex * 3 + 1] = color.g;
+      colors[particleIndex * 3 + 2] = color.b;
+      sizes[particleIndex] = 1;
+      
+      particleIndex++;
+    }
+  }
 }
 
 geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -109,38 +122,54 @@ const particles = new THREE.Points(geometry, material);
 scene.add(particles);
 
 let time = 0;
+const minZoom = 5.0; // Minimum zoom level (zoomed in)
+const maxZoom = 25.0; // Maximum zoom level (zoomed out)
+const zoomOscillationSpeed = 0.02; // Speed of zoom oscillation
+
 const animate = () => {
   requestAnimationFrame(animate);
-  time += 0.01;
+  time += 0.015; // Moderate animation speed
+  
+  // Oscillating zoom effect - bounces in and out
+  const zoomRange = maxZoom - minZoom;
+  const zoomLevel = minZoom + (Math.sin(time * zoomOscillationSpeed) * 0.5 + 0.5) * zoomRange;
+  const zoomFactor = Math.pow(1.05, zoomLevel); // Exponential zoom
   
   // Rotate around Y axis (vertical) for bird's eye view
-  particles.rotation.y = time * 0.5;
+  particles.rotation.y = time * 0.8; // Moderate rotation speed
   
   const positions = geometry.attributes.position.array as Float32Array;
   const colors = geometry.attributes.color.array as Float32Array;
   
-  for (let i = 0; i < particleCount; i++) {
-    const pos = calculateHelixPosition(i, particleCount, helixRadius, helixHeight, turns, time * 0.05);
-    positions[i * 3] = pos.x;
-    positions[i * 3 + 1] = pos.y;
-    positions[i * 3 + 2] = pos.z;
-    
-    // Ensure t calculation matches the position calculation for proper closure
-    const helixParticleIndex = Math.floor(i / 2);
-    const particlesPerHelix = particleCount / 2;
-    let t: number;
-    if (helixParticleIndex === particlesPerHelix - 1) {
-      t = 0.0; // Match position calculation for closure
-    } else {
-      t = helixParticleIndex / particlesPerHelix;
+  let particleIndex = 0;
+  for (let gridX = 0; gridX < gridSize; gridX++) {
+    for (let gridZ = 0; gridZ < gridSize; gridZ++) {
+      const offsetX = (gridX - (gridSize - 1) / 2) * gridSpacing;
+      const offsetZ = (gridZ - (gridSize - 1) / 2) * gridSpacing;
+      
+      for (let i = 0; i < particleCount; i++) {
+        const pos = calculateHelixPosition(i, particleCount, helixRadius, helixHeight, turns, time * 0.08);
+        // Apply grid offset and zoom
+        positions[particleIndex * 3] = (pos.x + offsetX) / zoomFactor;
+        positions[particleIndex * 3 + 1] = pos.y / zoomFactor;
+        positions[particleIndex * 3 + 2] = (pos.z + offsetZ) / zoomFactor;
+        
+        // Calculate t to match position calculation
+        const helixParticleIndex = Math.floor(i / 2);
+        const particlesPerHelix = particleCount / 2;
+        const t = (helixParticleIndex / particlesPerHelix) + time * 0.08;
+        const wrappedT = t >= 1.0 ? (t % 1.0) : (t < 0 ? (t % 1.0 + 1.0) : t);
+        
+        // Simple color scheme based on position
+        const hue = (wrappedT + (i % 2) * 0.5) % 1.0;
+        const color = new THREE.Color().setHSL(hue, 0.8, 0.6);
+        colors[particleIndex * 3] = color.r;
+        colors[particleIndex * 3 + 1] = color.g;
+        colors[particleIndex * 3 + 2] = color.b;
+        
+        particleIndex++;
+      }
     }
-    t = (t + time * 0.05) % 1.0;
-    
-    const hue = (t * 0.7 + (i % 2) * 0.3 + time * 0.1) % 1.0;
-    const color = new THREE.Color().setHSL(hue, 0.8, 0.6);
-    colors[i * 3] = color.r;
-    colors[i * 3 + 1] = color.g;
-    colors[i * 3 + 2] = color.b;
   }
   
   geometry.attributes.position.needsUpdate = true;

@@ -25,7 +25,19 @@ export const fragmentShader = `
   void main() {
     vec2 center = gl_PointCoord - vec2(0.5);
     float dist = length(center);
-    float alpha = 1.0 - smoothstep(0.0, 0.3, dist);
+    
+    // Hard edge with sharp cutoff
+    float hardEdge = 0.25;
+    float coreAlpha = step(dist, hardEdge);
+    
+    // Glow effect extending beyond the hard edge
+    float glowStart = hardEdge;
+    float glowEnd = 0.45;
+    float glowAlpha = 1.0 - smoothstep(glowStart, glowEnd, dist);
+    glowAlpha *= 0.5; // Make glow more subtle
+    
+    // Combine hard edge and glow
+    float alpha = min(1.0, coreAlpha + glowAlpha);
     
     // Calculate normal from point coordinate (spherical)
     vec3 normal = normalize(vec3(center * 2.0, sqrt(max(0.0, 1.0 - dot(center, center) * 4.0))));
@@ -52,12 +64,16 @@ export const fragmentShader = `
     vec3 finalColor = vColor;
     finalColor += vec3(1.0, 1.0, 1.0) * specular * 1.2; // Bright white specular highlight
     finalColor += vColor * fresnel * 0.6; // Edge glow with base color
-    finalColor += vec3(0.4, 0.6, 1.0) * rim * 0.4; // Blue rim light
-    finalColor += vec3(1.0, 1.0, 1.0) * rim * 0.2; // White rim highlight
+    finalColor += vColor * rim * 0.5; // Rim glow with base color
     
-    // Increase brightness and saturation for shiny metallic look
-    finalColor = mix(finalColor, vec3(1.0), specular * 0.4);
-    finalColor = mix(finalColor, vColor * 1.3, 0.3); // Boost saturation
+    // Increase brightness for shiny effect
+    finalColor = mix(finalColor, vec3(1.0), specular * 0.3);
+    
+    // Add cool glow tint in the glow area (cyan/purple mix)
+    if (dist > hardEdge) {
+      vec3 glowTint = mix(vec3(0.3, 0.7, 1.0), vec3(0.7, 0.4, 1.0), rim); // Cyan to purple
+      finalColor = mix(finalColor, glowTint, glowAlpha * 0.4);
+    }
     
     gl_FragColor = vec4(finalColor, alpha);
   }
