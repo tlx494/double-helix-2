@@ -122,8 +122,8 @@ const particles = new THREE.Points(geometry, material);
 scene.add(particles);
 
 let time = 0;
-const minZoom = 5.0; // Minimum zoom level (zoomed in)
-const maxZoom = 25.0; // Maximum zoom level (zoomed out)
+const minZoom = 20.0; // Minimum zoom level (zoomed in)
+const maxZoom = 30.0; // Maximum zoom level (zoomed out)
 const zoomOscillationSpeed = 0.02; // Speed of zoom oscillation
 
 const animate = () => {
