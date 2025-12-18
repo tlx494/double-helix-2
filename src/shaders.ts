@@ -1,24 +1,29 @@
 export const vertexShader = `
   attribute float size;
   attribute vec3 color;
+  attribute float glow;
   varying vec3 vColor;
   varying float vSize;
+  varying float vGlow;
   varying vec3 vPosition;
   varying vec3 vWorldPosition;
   
   void main() {
     vColor = color;
     vSize = size;
+    vGlow = glow;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     vPosition = mvPosition.xyz;
     vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-    gl_PointSize = size * (300.0 / -mvPosition.z);
+    // Make glowing particles larger
+    gl_PointSize = size * (300.0 / -mvPosition.z) * (1.0 + glow * 2.0);
     gl_Position = projectionMatrix * mvPosition;
   }
 `;
 
 export const fragmentShader = `
   varying vec3 vColor;
+  varying float vGlow;
   varying vec3 vPosition;
   varying vec3 vWorldPosition;
   
@@ -36,8 +41,13 @@ export const fragmentShader = `
     float glowAlpha = 1.0 - smoothstep(glowStart, glowEnd, dist);
     glowAlpha *= 0.5; // Make glow more subtle
     
+    // Enhanced glow for helix ends
+    float endGlowEnd = 0.6; // Extended glow range for ends
+    float endGlowAlpha = 1.0 - smoothstep(glowStart, endGlowEnd, dist);
+    endGlowAlpha *= vGlow * 1.5; // Bright glow for ends
+    
     // Combine hard edge and glow
-    float alpha = min(1.0, coreAlpha + glowAlpha);
+    float alpha = min(1.0, coreAlpha + glowAlpha + endGlowAlpha);
     
     // Calculate normal from point coordinate (spherical)
     vec3 normal = normalize(vec3(center * 2.0, sqrt(max(0.0, 1.0 - dot(center, center) * 4.0))));
@@ -69,10 +79,18 @@ export const fragmentShader = `
     // Increase brightness for shiny effect
     finalColor = mix(finalColor, vec3(1.0), specular * 0.3);
     
+    // Bright glow for helix ends - make them very bright
+    finalColor += vec3(1.0, 1.0, 1.0) * vGlow * 2.0; // Bright white glow
+    finalColor += vColor * vGlow * 1.5; // Enhanced base color
+    
     // Add cool glow tint in the glow area (cyan/purple mix)
     if (dist > hardEdge) {
       vec3 glowTint = mix(vec3(0.3, 0.7, 1.0), vec3(0.7, 0.4, 1.0), rim); // Cyan to purple
       finalColor = mix(finalColor, glowTint, glowAlpha * 0.4);
+      
+      // Extra bright glow tint for ends
+      vec3 endGlowTint = mix(vec3(0.5, 0.9, 1.0), vec3(0.9, 0.6, 1.0), rim); // Brighter cyan to purple
+      finalColor = mix(finalColor, endGlowTint, endGlowAlpha * 0.6);
     }
     
     gl_FragColor = vec4(finalColor, alpha);
