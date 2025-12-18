@@ -51,12 +51,12 @@ const camera = new THREE.PerspectiveCamera(
   10000
 );
 // Bird's eye view - camera above looking down
-camera.position.set(0, 8, 0);
+camera.position.set(0, 10, 0);
 camera.lookAt(0, 0, 0);
 
 // Grid parameters
 const gridSize = 5; // 5x5 grid
-const gridSpacing = 35.0; // Space between helices (almost touching)
+const gridSpacing = 50.0; // Space between helices
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -108,7 +108,7 @@ for (let gridX = 0; gridX < gridSize; gridX++) {
       colors[particleIndex * 3] = color.r;
       colors[particleIndex * 3 + 1] = color.g;
       colors[particleIndex * 3 + 2] = color.b;
-      sizes[particleIndex] = 1;
+      sizes[particleIndex] = 1.5; // Initial size (will be updated in animation loop)
       
       // Initial glow intensity (will be updated in animation loop)
       glows[particleIndex] = 0.0;
@@ -128,7 +128,7 @@ scene.add(particles);
 
 let time = 0;
 const minZoom = 10.0; // Minimum zoom level (zoomed in)
-const maxZoom = 40.0; // Maximum zoom level (zoomed out)
+const maxZoom = 50.0; // Maximum zoom level (zoomed out)
 const zoomOscillationSpeed = 0.5; // Speed of zoom oscillation
 
 const animate = () => {
@@ -146,6 +146,7 @@ const animate = () => {
   const positions = geometry.attributes.position.array as Float32Array;
   const colors = geometry.attributes.color.array as Float32Array;
   const glows = geometry.attributes.glow.array as Float32Array;
+  const sizes = geometry.attributes.size.array as Float32Array;
   
   let particleIndex = 0;
   for (let gridX = 0; gridX < gridSize; gridX++) {
@@ -224,6 +225,9 @@ const animate = () => {
         colors[particleIndex * 3 + 1] = color.g;
         colors[particleIndex * 3 + 2] = color.b;
         
+        // Scale particle size with zoom factor so they get smaller as we zoom out
+        sizes[particleIndex] = 1.5 / zoomFactor; // Slightly thicker lines
+        
         particleIndex++;
       }
     }
@@ -232,6 +236,7 @@ const animate = () => {
   geometry.attributes.position.needsUpdate = true;
   geometry.attributes.color.needsUpdate = true;
   geometry.attributes.glow.needsUpdate = true;
+  geometry.attributes.size.needsUpdate = true;
   
   // Keep camera fixed in bird's eye view
   camera.position.set(0, 8, 0);
